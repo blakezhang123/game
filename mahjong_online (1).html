@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🀄 麻将</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;
+  background:#1a5c2a;font-family:'Microsoft YaHei',sans-serif;color:#fff}
+
+/* ══════════════ 整体布局 ══════════════ */
+#game{
+  width:100vw;height:100vh;
+  display:grid;
+  grid-template-rows:auto 1fr auto auto;
+  grid-template-columns:auto 1fr auto;
+  grid-template-areas:
+    "top   top   top"
+    "left  ctr   right"
+    "my    my    my"
+    "acts  acts  acts";
+  max-width:960px;margin:0 auto;
+  gap:0;
+}
+
+/* ══════════════ 对家（上方） ══════════════ */
+#top{
+  grid-area:top;
+  background:rgba(0,0,0,.35);
+  display:flex;flex-direction:column;align-items:center;
+  padding:6px 12px 4px;gap:4px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+#top .pname{font-size:12px;color:#ffd700;font-weight:bold}
+#top .hand-row{display:flex;gap:2px;justify-content:center}
+
+/* ══════════════ 下家/上家（两侧） ══════════════ */
+.side{
+  display:flex;flex-direction:column;align-items:center;
+  padding:6px 4px;gap:4px;
+  background:rgba(0,0,0,.2);
+  border-right:1px solid rgba(255,255,255,.06);
+}
+#left{grid-area:left;border-right:1px solid rgba(255,255,255,.06)}
+#right{grid-area:right;border-left:1px solid rgba(255,255,255,.06);border-right:none}
+.side .pname{font-size:11px;color:#ffd700;font-weight:bold;writing-mode:initial}
+.side .vert{display:flex;flex-direction:column;gap:2px;align-items:center}
+
+/* ══════════════ 中央牌桌 ══════════════ */
+#ctr{
+  grid-area:ctr;
+  display:grid;
+  grid-template-rows:1fr 36px 1fr;
+  grid-template-columns:1fr 36px 1fr;
+  padding:6px;gap:4px;
+  background:radial-gradient(ellipse at center,#1e6b30 0%,#154820 100%);
+}
+.disc-zone{
+  background:rgba(0,0,0,.18);border-radius:6px;
+  display:flex;flex-wrap:wrap;gap:2px;
+  padding:4px;align-content:flex-start;
+  overflow:hidden;
+}
+.disc-zone-label{
+  font-size:10px;color:rgba(255,215,0,.5);
+  width:100%;margin-bottom:2px;
+}
+.ctr-info{
+  grid-column:2;grid-row:2;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.4);border-radius:8px;
+  font-size:11px;color:#ffd700;gap:1px;
+}
+.ctr-info .big{font-size:20px;font-weight:bold;line-height:1}
+/* discard zone placements */
+#dz-top  {grid-column:1/4;grid-row:1; max-height:76px}
+#dz-left {grid-column:1;  grid-row:2/3}
+#dz-right{grid-column:3;  grid-row:2/3}
+#dz-bot  {grid-column:1/4;grid-row:3; max-height:76px}
+
+/* ══════════════ 我的区域 ══════════════ */
+#my{
+  grid-area:my;
+  background:rgba(0,0,0,.4);
+  border-top:2px solid rgba(255,215,0,.3);
+  display:flex;align-items:center;justify-content:center;
+  gap:6px;padding:8px 10px 6px;
+  flex-wrap:wrap;
+  position:relative;
+}
+#my .open-row{display:flex;gap:3px;align-items:flex-end}
+#my .sep{width:8px;flex-shrink:0}
+#my .hand-row{display:flex;gap:4px;align-items:flex-end;flex-wrap:nowrap}
+
+/* ══════════════ 操作区 ══════════════ */
+#acts{
+  grid-area:acts;
+  background:rgba(0,0,0,.5);
+  border-top:1px solid rgba(255,255,255,.1);
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:5px 10px 8px;
+}
+.abar{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;min-height:38px;align-items:center}
+#msg{font-size:13px;color:#ffd700;text-align:center;min-height:18px}
+
+/* ══════════════ 牌（通用基础）══════════════ */
+.tile{
+  display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+  border-radius:4px;cursor:default;user-select:none;flex-shrink:0;
+  background:linear-gradient(160deg,#fffef8 0%,#f5e8c8 55%,#e0d0a0 100%);
+  border-top:2px solid rgba(255,255,255,.95);
+  border-left:2px solid rgba(255,250,230,.7);
+  border-right:3px solid #9a7828;
+  border-bottom:4px solid #8a6010;
+  box-shadow:2px 3px 7px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.7);
+  transition:transform .1s,box-shadow .1s;
+  line-height:1;
+}
+/* 大牌（自己手牌）*/
+.tile.lg{width:52px;height:70px}
+.tile.lg .ti{font-size:36px}
+.tile.lg .tl{font-size:9px;font-weight:bold;margin-top:-2px}
+/* 中牌（明牌组合）*/
+.tile.md{width:36px;height:48px}
+.tile.md .ti{font-size:24px}
+.tile.md .tl{font-size:7px;font-weight:bold;margin-top:-2px}
+/* 小牌（弃牌区、AI手牌）*/
+.tile.sm{width:24px;height:32px}
+.tile.sm .ti{font-size:15px}
+.tile.sm .tl{font-size:6px;font-weight:bold;margin-top:-1px}
+
+/* 牌背 */
+.tile.back{
+  background:linear-gradient(145deg,#1a3a8a 0%,#2a5ac0 50%,#1a3a8a 100%);
+  border-top:2px solid #3a5aaa;border-left:2px solid #2a4a9a;
+  border-right:3px solid #0a1a5a;border-bottom:4px solid #081440;
+}
+.tile.back .ti{font-size:14px;color:rgba(150,180,255,.35)}
+.tile.back.lg .ti{font-size:22px}
+.tile.back::after{content:''}
+
+/* 颜色 */
+.wan .ti{color:#c00}.wan .tl{color:#c00}
+.tiao .ti{color:#060}.tiao .tl{color:#060}
+.bing .ti{color:#00c}.bing .tl{color:#00c}
+.feng .ti{color:#996600}.feng .tl{color:#996600}
+.zhong .ti{color:#c00}.fa .ti{color:#060}.bai .ti{color:#999}
+.zhong .tl{color:#c00}.fa .tl{color:#060}.bai .tl{color:#999}
+
+/* 交互 */
+.tile.clickable:hover{transform:translateY(-14px) scale(1.05);
+  box-shadow:2px 10px 18px rgba(0,0,0,.55);cursor:pointer}
+.tile.sel{transform:translateY(-16px);border-color:#e94560;
+  box-shadow:0 0 14px #e94560,2px 10px 16px rgba(0,0,0,.5)}
+.tile.hi{border-color:#ffd700;
+  box-shadow:0 0 12px rgba(255,215,0,.8),2px 3px 7px rgba(0,0,0,.5)}
+
+/* ══════════════ 按钮 ══════════════ */
+.btn{padding:7px 16px;border:none;border-radius:8px;cursor:pointer;
+  font-size:13px;font-weight:bold;transition:all .14s;
+  box-shadow:0 3px 6px rgba(0,0,0,.35)}
+.btn:hover{opacity:.88;transform:translateY(-2px)}
+.btn-hu  {background:linear-gradient(135deg,#e94560,#c42040);color:#fff}
+.btn-peng{background:linear-gradient(135deg,#ffd700,#e6b800);color:#222}
+.btn-chi {background:linear-gradient(135deg,#4fc3f7,#29b0e0);color:#222}
+.btn-pass{background:rgba(80,80,80,.8);color:#ccc;border:1px solid #555}
+.btn-menu{background:rgba(255,255,255,.1);color:#aaa;font-size:11px;
+  padding:4px 10px;border:1px solid rgba(255,255,255,.15)}
+
+/* ══════════════ 大厅 ══════════════ */
+#lobby{position:fixed;inset:0;
+  background:radial-gradient(ellipse at center,#0d3318 0%,#051508 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;z-index:999}
+.lobby-title{font-size:2.8rem;font-weight:bold;color:#ffd700;
+  text-shadow:0 0 30px rgba(255,215,0,.6);letter-spacing:4px}
+.linput{padding:10px 14px;border-radius:8px;border:1px solid #3a6a3a;
+  background:#0a1f0d;color:#fff;font-size:15px;width:240px;text-align:center}
+.linput::placeholder{color:#3a5a3a}
+.lsel{padding:10px;border-radius:8px;border:1px solid #3a6a3a;
+  background:#0a1f0d;color:#fff;font-size:14px;width:240px}
+.lbtn{padding:12px 36px;background:linear-gradient(135deg,#e94560,#c42040);
+  color:#fff;border:none;border-radius:10px;font-size:16px;
+  font-weight:bold;cursor:pointer;box-shadow:0 4px 16px rgba(233,69,96,.4)}
+.lbtn:hover{transform:translateY(-2px)}
+.lsolo{padding:8px 24px;background:rgba(255,255,255,.08);color:#888;
+  border:1px solid #2a4a2a;border-radius:8px;font-size:13px;cursor:pointer}
+.lsolo:hover{color:#ccc}
+#lstatus{color:#66cc66;font-size:13px;min-height:20px}
+
+/* ══════════════ 弹窗 ══════════════ */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);
+  display:flex;align-items:center;justify-content:center;z-index:200}
+.obox{background:linear-gradient(160deg,#0d3318,#051a0a);
+  border:3px solid #ffd700;border-radius:16px;
+  padding:28px 40px;text-align:center;max-width:360px;
+  box-shadow:0 0 60px rgba(255,215,0,.2)}
+.obox h2{font-size:2.4rem;margin-bottom:8px;color:#ffd700}
+.obox .sub{color:#ccc;font-size:15px;margin-bottom:20px}
+
+/* toast */
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.85);color:#ffd700;padding:8px 22px;
+  border-radius:20px;font-size:13px;z-index:300;
+  pointer-events:none;opacity:0;transition:opacity .4s;white-space:nowrap}
+
+/* 活跃玩家指示 */
+.active-player{box-shadow:0 0 0 2px #ffd700,0 0 16px rgba(255,215,0,.4)!important}
+</style>
+</head>
+<body>
+
+<!-- ──────────── 大厅 ──────────── -->
+<div id="lobby">
+  <div class="lobby-title">🀄 麻将</div>
+  <div style="color:#555;font-size:13px">联机：4人填相同房间号→各选不同座位→人齐开始</div>
+  <input id="l-name" class="linput" placeholder="昵称（可选）" maxlength="8">
+  <input id="l-room" class="linput" placeholder="房间号（如 8888）" maxlength="8">
+  <select id="l-seat" class="lsel">
+    <option value="0">🀀 东家（坐庄）</option>
+    <option value="1">🀁 南家</option>
+    <option value="2">🀂 西家</option>
+    <option value="3">🀃 北家</option>
+  </select>
+  <button class="lbtn" onclick="mpJoin()">加入房间</button>
+  <div id="lstatus"></div>
+  <div style="border-top:1px solid #1a3a1a;width:240px;padding-top:10px;text-align:center">
+    <button class="lsolo" onclick="startSolo()">单机模式（不联网）</button>
+  </div>
+</div>
+
+<!-- ──────────── 游戏主界面 ──────────── -->
+<div id="game" style="display:none">
+
+  <!-- 对家（上方）-->
+  <div id="top">
+    <div class="pname" id="name-2">对家（西）</div>
+    <div class="hand-row" id="hand-2"></div>
+    <div class="open-row" id="open-2" style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center"></div>
+  </div>
+
+  <!-- 下家（左侧）-->
+  <div class="side" id="left">
+    <div class="pname" id="name-1">下家</div>
+    <div class="vert" id="hand-1"></div>
+    <div id="open-1" style="display:flex;flex-direction:column;gap:2px;margin-top:4px"></div>
+  </div>
+
+  <!-- 中央牌桌 -->
+  <div id="ctr">
+    <div class="disc-zone" id="dz-top" >
+      <div class="disc-zone-label">对家弃牌</div>
+    </div>
+    <div class="disc-zone" id="dz-left" style="max-width:64px">
+      <div class="disc-zone-label" style="writing-mode:vertical-rl;text-orientation:mixed;width:auto;margin:0">下家</div>
+    </div>
+    <div class="ctr-info" id="ctr-info">
+      <div class="big" id="tiles-left">0</div>
+      <div style="font-size:9px;color:#888">剩余</div>
+    </div>
+    <div class="disc-zone" id="dz-right" style="max-width:64px">
+      <div class="disc-zone-label" style="writing-mode:vertical-rl;text-orientation:mixed;width:auto;margin:0">上家</div>
+    </div>
+    <div class="disc-zone" id="dz-bot">
+      <div class="disc-zone-label">我的弃牌</div>
+    </div>
+  </div>
+
+  <!-- 上家（右侧）-->
+  <div class="side" id="right">
+    <div class="pname" id="name-3">上家</div>
+    <div class="vert" id="hand-3"></div>
+    <div id="open-3" style="display:flex;flex-direction:column;gap:2px;margin-top:4px"></div>
+  </div>
+
+  <!-- 我的手牌区 -->
+  <div id="my">
+    <div class="open-row" id="open-0"></div>
+    <div class="sep"></div>
+    <div class="hand-row" id="hand-0"></div>
+    <div style="position:absolute;top:4px;right:8px">
+      <button class="btn btn-menu" onclick="startSolo()">重开</button>
+    </div>
+  </div>
+
+  <!-- 操作区 -->
+  <div id="acts">
+    <div class="abar" id="abar"></div>
+    <div id="msg">请等待…</div>
+  </div>
+</div>
+
+<!-- 结算弹窗 -->
+<div class="overlay" id="endlay" style="display:none">
+  <div class="obox" id="endbox"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════
+// 牌面数据
+// ════════════════════════════════════════════
+const ICON={
+  '万|1':'🀇','万|2':'🀈','万|3':'🀉','万|4':'🀊','万|5':'🀋',
+  '万|6':'🀌','万|7':'🀍','万|8':'🀎','万|9':'🀏',
+  '条|1':'🀐','条|2':'🀑','条|3':'🀒','条|4':'🀓','条|5':'🀔',
+  '条|6':'🀕','条|7':'🀖','条|8':'🀗','条|9':'🀘',
+  '饼|1':'🀙','饼|2':'🀚','饼|3':'🀛','饼|4':'🀜','饼|5':'🀝',
+  '饼|6':'🀞','饼|7':'🀟','饼|8':'🀠','饼|9':'🀡',
+  '风|东':'🀀','风|南':'🀁','风|西':'🀂','风|北':'🀃',
+  '箭|中':'🀄','箭|发':'🀅','箭|白':'🀆',
+};
+// 文字备用标签
+const LABEL={
+  '万|1':'1万','万|2':'2万','万|3':'3万','万|4':'4万','万|5':'5万',
+  '万|6':'6万','万|7':'7万','万|8':'8万','万|9':'9万',
+  '条|1':'1条','条|2':'2条','条|3':'3条','条|4':'4条','条|5':'5条',
+  '条|6':'6条','条|7':'7条','条|8':'8条','条|9':'9条',
+  '饼|1':'1饼','饼|2':'2饼','饼|3':'3饼','饼|4':'4饼','饼|5':'5饼',
+  '饼|6':'6饼','饼|7':'7饼','饼|8':'8饼','饼|9':'9饼',
+  '风|东':'东','风|南':'南','风|西':'西','风|北':'北',
+  '箭|中':'中','箭|发':'发','箭|白':'白',
+};
+const SUIT_CLS={'万':'wan','条':'tiao','饼':'bing','风':'feng','箭|中':'zhong','箭|发':'fa','箭|白':'bai'};
+
+let UID=0;
+const mk=(s,v)=>({s,v,id:UID++});
+const tkey=t=>t.s+'|'+t.v;
+const ticon=t=>ICON[tkey(t)]||'?';
+const tlabel=t=>LABEL[tkey(t)]||'';
+const tcls=t=>t.s==='箭'?SUIT_CLS[tkey(t)]:SUIT_CLS[t.s]||'';
+
+function makeTile(tile,{back=false,size='sm',clickable=false,sel=false,hi=false}={}){
+  const d=document.createElement('div');
+  let c='tile '+size;
+  if(back){d.className=c+' back';d.innerHTML='<span class="ti">🀫</span>';return d;}
+  c+=' '+tcls(tile);
+  if(clickable)c+=' clickable';
+  if(sel)c+=' sel';
+  if(hi)c+=' hi';
+  d.className=c;
+  d.innerHTML=`<span class="ti">${ticon(tile)}</span><span class="tl">${tlabel(tile)}</span>`;
+  if(clickable)d.onclick=()=>onMyTile(tile.id);
+  return d;
+}
+
+// ════════════════════════════════════════════
+// 洗牌 / 排序
+// ════════════════════════════════════════════
+let _rng=null;
+const rand=()=>_rng?_rng():Math.random();
+const seededRng=s=>{let n=s>>>0;return()=>{n=(Math.imul(1664525,n)+1013904223)>>>0;return n/0x100000000;}};
+
+function makeDeck(){
+  UID=0;const d=[];
+  for(const s of['万','条','饼'])for(let v=1;v<=9;v++)for(let k=0;k<4;k++)d.push(mk(s,v));
+  for(const v of['东','南','西','北'])for(let k=0;k<4;k++)d.push(mk('风',v));
+  for(const v of['中','发','白'])for(let k=0;k<4;k++)d.push(mk('箭',v));
+  for(let i=d.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[d[i],d[j]]=[d[j],d[i]];}
+  return d;
+}
+const SORD={万:0,条:1,饼:2,风:3,箭:4},VORD={东:1,南:2,西:3,北:4,中:1,发:2,白:3};
+const sortH=h=>[...h].sort((a,b)=>{const s=SORD[a.s]-SORD[b.s];if(s)return s;const av=+a.v||VORD[a.v]||0,bv=+b.v||VORD[b.v]||0;return av-bv;});
+
+// ════════════════════════════════════════════
+// 胡牌判断
+// ════════════════════════════════════════════
+function checkWin(hand,open){
+  const need=4-open.length;
+  if(hand.length!==need*3+2)return false;
+  const keys=hand.map(tkey);
+  if(!open.length){const c={};keys.forEach(k=>c[k]=(c[k]||0)+1);
+    if(Object.keys(c).length===7&&Object.values(c).every(v=>v===2))return true;}
+  for(const pk of[...new Set(keys)]){
+    const c={};keys.forEach(k=>c[k]=(c[k]||0)+1);
+    if(c[pk]<2)continue;c[pk]-=2;if(formMelds(c,need))return true;
+  }
+  return false;
+}
+function formMelds(c,n){
+  if(!n)return!Object.values(c).find(v=>v>0);
+  const k=Object.keys(c).find(k=>c[k]>0);if(!k)return!n;
+  const[s,vs]=k.split('|'),v=+vs;
+  if(c[k]>=3){const nc={...c};nc[k]-=3;if(!nc[k])delete nc[k];if(formMelds(nc,n-1))return true;}
+  if(s==='万'||s==='条'||s==='饼'){
+    const k2=s+'|'+(v+1),k3=s+'|'+(v+2);
+    if((c[k2]||0)>0&&(c[k3]||0)>0){
+      const nc={...c};nc[k]--;nc[k2]--;nc[k3]--;
+      if(!nc[k])delete nc[k];if(!nc[k2])delete nc[k2];if(!nc[k3])delete nc[k3];
+      if(formMelds(nc,n-1))return true;
+    }
+  }
+  return false;
+}
+const canPeng=(hand,tile)=>hand.filter(t=>tkey(t)===tkey(tile)).length>=2;
+
+// ════════════════════════════════════════════
+// 游戏状态
+// ════════════════════════════════════════════
+const PNAMES=['你','下家','对家','上家'];
+let G={};
+
+function initGame(mySeat=0){
+  document.getElementById('game').style.display='grid';
+  document.getElementById('lobby').style.display='none';
+  document.getElementById('endlay').style.display='none';
+  const deck=makeDeck();
+  G={
+    deck,pos:0,mySeat,
+    players:[0,1,2,3].map(i=>({id:i,hand:[],open:[],disc:[]})),
+    cur:0,phase:'',
+    lastDisc:null,lastFrom:-1,
+    claimFor:null,chiOpts:null,
+    msg:'游戏开始！',
+  };
+  for(let i=0;i<13;i++)for(let p=0;p<4;p++)G.players[p].hand.push(G.deck[G.pos++]);
+  G.players[0].hand=sortH(G.players[0].hand);
+  setTimeout(()=>drawTile(0),400);
+}
+
+const tilesLeft=()=>G.deck.length-G.pos;
+
+// ════════════════════════════════════════════
+// 游戏流程
+// ════════════════════════════════════════════
+function drawTile(pid){
+  if(G.pos>=G.deck.length){endGame(-1,'荒庄');return;}
+  const t=G.deck[G.pos++];
+  G.players[pid].hand.push(t);
+  G.cur=pid;
+  if(pid===0){
+    G.players[0].hand=sortH(G.players[0].hand);
+    G.phase='discard';
+    const hu=checkWin(G.players[0].hand,G.players[0].open);
+    G.msg=hu?'✨ 可以自摸！或点击要打出的牌':'点击要打出的牌';
+  }else{
+    G.phase='ai';
+    G.msg=PNAMES[pid]+' 摸牌...';
+    setTimeout(()=>aiTurn(pid),800);
+  }
+  render();
+}
+
+function doDiscard(pid,tile){
+  const p=G.players[pid];
+  p.hand=p.hand.filter(t=>t.id!==tile.id);
+  p.disc.push(tile);
+  G.lastDisc=tile;G.lastFrom=pid;
+  G.msg=PNAMES[pid]+' 打出 '+ticon(tile)+' '+tlabel(tile);
+  G.phase='claim';
+  checkClaims(tile,pid);
+}
+
+// ════════════════════════════════════════════
+// 吃碰胡
+// ════════════════════════════════════════════
+function getChiOpts(hand,tile){
+  const opts=[];
+  if(tile.s!=='万'&&tile.s!=='条'&&tile.s!=='饼')return opts;
+  const v=tile.v,s=tile.s,f=val=>hand.find(t=>t.s===s&&t.v===val);
+  if(v>=3){const a=f(v-2),b=f(v-1);if(a&&b)opts.push({meld:[a,b,tile],use:[a,b]});}
+  if(v>=2&&v<=8){const a=f(v-1),b=f(v+1);if(a&&b)opts.push({meld:[a,tile,b],use:[a,b]});}
+  if(v<=7){const a=f(v+1),b=f(v+2);if(a&&b)opts.push({meld:[tile,a,b],use:[a,b]});}
+  return opts;
+}
+function doChi(pid,opt){
+  const p=G.players[pid];
+  opt.use.forEach(ht=>{const i=p.hand.findIndex(t=>t.id===ht.id);if(i!==-1)p.hand.splice(i,1);});
+  p.open.push({type:'chi',tiles:opt.meld});
+  G.claimFor=null;G.chiOpts=null;
+  toast(PNAMES[pid]+' 吃牌！');
+  G.msg=PNAMES[pid]+' 吃牌，打出一张';
+  if(pid===0){G.phase='discard';render();}
+  else{G.phase='ai';setTimeout(()=>doDiscard(pid,aiPick(pid)),700);render();}
+}
+function doPeng(pid,tile){
+  const p=G.players[pid],k=tkey(tile);
+  let rm=0;const taken=[];
+  p.hand=p.hand.filter(t=>{if(rm<2&&tkey(t)===k){rm++;taken.push(t);return false;}return true;});
+  p.open.push({type:'peng',tiles:[...taken,tile]});
+  G.claimFor=null;G.chiOpts=null;
+  toast(PNAMES[pid]+' 碰牌！');
+  G.msg=PNAMES[pid]+' 碰牌，打出一张';
+  if(pid===0){G.phase='discard';render();}
+  else{G.phase='ai';setTimeout(()=>doDiscard(pid,aiPick(pid)),700);render();}
+}
+function checkClaims(tile,from){
+  const next=(from+1)%4,p0=G.players[0];
+  if(from!==0){
+    const hu0=checkWin([...p0.hand,tile],p0.open);
+    const pg0=canPeng(p0.hand,tile);
+    const chi0=next===0?getChiOpts(p0.hand,tile):[];
+    if(hu0||pg0||chi0.length>0){
+      G.claimFor={tile,from};G.chiOpts=chi0;G.phase='claim_p0';
+      const acts=[hu0&&'胡牌',pg0&&'碰',chi0.length&&'吃'].filter(Boolean).join(' / ');
+      G.msg='你可以：'+acts+' 或 过';
+      render();return;
+    }
+  }
+  aiClaims(tile,from);
+}
+function aiClaims(tile,from){
+  const next=(from+1)%4;
+  for(let pid=1;pid<4;pid++){
+    if(pid===from)continue;
+    if(checkWin([...G.players[pid].hand,tile],G.players[pid].open)){endGame(pid,'荣！');return;}
+  }
+  for(let pid=1;pid<4;pid++){
+    if(pid===from)continue;
+    if(canPeng(G.players[pid].hand,tile)&&Math.random()>.45){doPeng(pid,tile);return;}
+  }
+  if(next!==0&&Math.random()>.55){
+    const opts=getChiOpts(G.players[next].hand,tile);
+    if(opts.length){doChi(next,opts[0]);return;}
+  }
+  G.claimFor=null;G.chiOpts=null;G.phase='draw';
+  setTimeout(()=>drawTile(next),500);render();
+}
+
+// ════════════════════════════════════════════
+// AI
+// ════════════════════════════════════════════
+function aiTurn(pid){
+  if(checkWin(G.players[pid].hand,G.players[pid].open)){endGame(pid,'自摸！');return;}
+  doDiscard(pid,aiPick(pid));
+}
+function syn(tile,hand){
+  const k=tkey(tile),same=hand.filter(t=>tkey(t)===k&&t.id!==tile.id).length;
+  if(same>=2)return 10;if(same===1)return 7;
+  if(tile.s==='万'||tile.s==='条'||tile.s==='饼'){
+    const v=tile.v,h=x=>hand.some(t=>t.s===tile.s&&t.v===x&&t.id!==tile.id);
+    if(h(v-1)&&h(v+1))return 9;if(h(v-2)&&h(v-1))return 8;if(h(v+1)&&h(v+2))return 8;
+    if(h(v-1)||h(v+1))return 5;if(h(v-2)||h(v+2))return 2;
+  }
+  return 0;
+}
+const aiPick=pid=>{const h=G.players[pid].hand;return h.reduce((w,t)=>syn(t,h)<syn(w,h)?t:w,h[0]);};
+
+// ════════════════════════════════════════════
+// 玩家操作
+// ════════════════════════════════════════════
+function onMyTile(id){
+  if(G.phase!=='discard')return;
+  const tile=G.players[0].hand.find(t=>t.id===id);
+  if(!tile)return;
+  if(MP.online)mpSend({type:'discard',id:tile.id});
+  doDiscard(0,tile);
+}
+function btnHuSelf(){
+  if(checkWin(G.players[0].hand,G.players[0].open)){
+    if(MP.online)mpSend({type:'hu',tsumo:true});
+    endGame(0,'自摸！');
+  }
+}
+function btnHuDisc(){
+  const tile=G.claimFor?.tile;if(!tile)return;
+  if(checkWin([...G.players[0].hand,tile],G.players[0].open)){
+    G.players[0].hand.push(tile);
+    if(MP.online)mpSend({type:'hu',tsumo:false});
+    endGame(0,'荣！');
+  }
+}
+function btnPeng(){if(MP.online)mpSend({type:'peng'});doPeng(0,G.claimFor.tile);}
+function btnChi(i){if(MP.online)mpSend({type:'chi',idx:i});doChi(0,G.chiOpts[i]);}
+function btnPass(){
+  G.claimFor=null;G.chiOpts=null;
+  if(MP.online)mpSend({type:'pass'});
+  aiClaims(G.lastDisc,G.lastFrom);
+}
+
+// ════════════════════════════════════════════
+// 结束
+// ════════════════════════════════════════════
+function endGame(winner,msg){
+  G.phase='over';
+  const seats=['东家','南家','西家','北家'];
+  const box=document.getElementById('endbox');
+  box.innerHTML=`
+    <h2>${winner>=0?'🎉 胡牌！':'🀄 荒庄'}</h2>
+    <p class="sub">${winner>=0?PNAMES[winner]+'（'+seats[winner]+'）'+msg:'本局平局'}</p>
+    <button class="btn btn-hu" style="padding:10px 28px;font-size:15px"
+      onclick="startSolo();document.getElementById('endlay').style.display='none'">再来一局</button>`;
+  document.getElementById('endlay').style.display='flex';
+}
+
+// ════════════════════════════════════════════
+// 渲染
+// ════════════════════════════════════════════
+function render(){
+  const P=G.players;
+  // 更新剩余牌数
+  document.getElementById('tiles-left').textContent=tilesLeft();
+  // 高亮活跃玩家标签
+  ['name-0','name-1','name-2','name-3'].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    if(el)el.style.color=i===G.cur?'#fff':'#ffd700';
+  });
+
+  // ── 对家（AI2）──
+  const h2=document.getElementById('hand-2');h2.innerHTML='';
+  P[2].hand.forEach(()=>h2.appendChild(makeTile(null,{back:true,size:'sm'})));
+  renderOpenMelds(document.getElementById('open-2'),2,'md');
+
+  // ── 下家（AI1，左侧）──
+  const h1=document.getElementById('hand-1');h1.innerHTML='';
+  P[1].hand.forEach(()=>h1.appendChild(makeTile(null,{back:true,size:'sm'})));
+  renderOpenMelds(document.getElementById('open-1'),1,'sm');
+
+  // ── 上家（AI3，右侧）──
+  const h3=document.getElementById('hand-3');h3.innerHTML='';
+  P[3].hand.forEach(()=>h3.appendChild(makeTile(null,{back:true,size:'sm'})));
+  renderOpenMelds(document.getElementById('open-3'),3,'sm');
+
+  // ── 弃牌区 ──
+  const DZ=[
+    {id:'dz-bot', pid:0,lbl:'我的弃牌'},
+    {id:'dz-left',pid:1,lbl:'下家弃牌'},
+    {id:'dz-top', pid:2,lbl:'对家弃牌'},
+    {id:'dz-right',pid:3,lbl:'上家弃牌'},
+  ];
+  DZ.forEach(({id,pid,lbl})=>{
+    const zone=document.getElementById(id);
+    zone.innerHTML=`<div class="disc-zone-label">${lbl}</div>`;
+    const last=P[pid].disc[P[pid].disc.length-1];
+    P[pid].disc.forEach(t=>zone.appendChild(makeTile(t,{size:'sm',hi:t===last&&pid===G.lastFrom})));
+  });
+
+  // ── 我的手牌 ──
+  renderOpenMelds(document.getElementById('open-0'),0,'md');
+  const h0=document.getElementById('hand-0');h0.innerHTML='';
+  const canDis=G.phase==='discard';
+  const drawnTile=P[0].hand[P[0].hand.length-1];
+  // 如果是 claim_p0 状态，显示待吃/碰的牌
+  if(G.phase==='claim_p0'&&G.claimFor){
+    P[0].hand.forEach(t=>h0.appendChild(makeTile(t,{size:'lg'})));
+    const sep=document.createElement('span');sep.style.cssText='color:#ffd700;font-size:1.4rem;margin:0 6px;align-self:center';sep.textContent='→';
+    h0.appendChild(sep);
+    h0.appendChild(makeTile(G.claimFor.tile,{size:'lg',hi:true}));
+  } else {
+    P[0].hand.forEach(t=>h0.appendChild(makeTile(t,{size:'lg',clickable:canDis,hi:canDis&&t===drawnTile})));
+  }
+
+  // ── 操作按钮 ──
+  const abar=document.getElementById('abar');abar.innerHTML='';
+  const canHuSelf=G.phase==='discard'&&checkWin(P[0].hand,P[0].open);
+  const canHuDisc=G.phase==='claim_p0'&&G.claimFor&&checkWin([...P[0].hand,G.claimFor.tile],P[0].open);
+  const canPg   =G.phase==='claim_p0'&&G.claimFor&&canPeng(P[0].hand,G.claimFor.tile);
+  const chiOpts =(G.phase==='claim_p0'&&G.chiOpts)||[];
+
+  if(canHuSelf) addBtn(abar,'🀄 自摸！','btn-hu',btnHuSelf);
+  if(canHuDisc) addBtn(abar,'🀄 荣！','btn-hu',btnHuDisc);
+  if(canPg)     addBtn(abar,'碰！','btn-peng',btnPeng);
+  chiOpts.forEach((opt,i)=>{
+    const icons=opt.meld.map(ticon).join('');
+    addBtn(abar,'吃 '+icons,'btn-chi',()=>btnChi(i));
+  });
+  if(G.phase==='claim_p0') addBtn(abar,'过','btn-pass',btnPass);
+
+  document.getElementById('msg').textContent=G.msg;
+}
+
+function renderOpenMelds(el,pid,size){
+  el.innerHTML='';
+  G.players[pid].open.forEach(m=>{
+    const mg=document.createElement('div');
+    mg.style.cssText='display:flex;gap:1px;background:rgba(255,255,255,.1);border-radius:3px;padding:2px;margin:1px';
+    m.tiles.forEach(t=>mg.appendChild(makeTile(t,{size})));
+    el.appendChild(mg);
+  });
+}
+
+function addBtn(parent,text,cls,fn){
+  const b=document.createElement('button');b.className='btn '+cls;
+  b.textContent=text;b.onclick=fn;parent.appendChild(b);
+}
+
+// ════════════════════════════════════════════
+// 联机模块
+// ════════════════════════════════════════════
+const MP={ws:null,room:'',mySeat:-1,online:false};
+
+function mpJoin(){
+  const room=document.getElementById('l-room').value.trim();
+  const seat=+document.getElementById('l-seat').value;
+  const name=document.getElementById('l-name').value.trim()||('玩家'+seat);
+  if(!room){document.getElementById('lstatus').textContent='⚠ 请输入房间号';return;}
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  MP.ws=new WebSocket(proto+'//'+location.host);
+  MP.room=room;MP.mySeat=seat;MP.online=true;
+  document.getElementById('lstatus').textContent='连接中...';
+  MP.ws.onopen=()=>MP.ws.send(JSON.stringify({type:'join',room,seat,name}));
+  MP.ws.onmessage=e=>{
+    const msg=JSON.parse(e.data);
+    if(msg.type==='error'){document.getElementById('lstatus').textContent='❌ '+msg.msg;MP.online=false;return;}
+    if(msg.type==='joined')document.getElementById('lstatus').textContent=`✅ ${msg.name} 加入 (${msg.count}/4) 等待…`;
+    if(msg.type==='start'){_rng=seededRng(msg.seed);initGame(MP.mySeat);}
+    if(msg.type==='action'&&msg.seat!==MP.mySeat)applyRemote(msg.seat,msg.data);
+    if(msg.type==='left')toast(PNAMES[msg.seat]+' 已离开');
+  };
+  MP.ws.onerror=()=>{document.getElementById('lstatus').textContent='❌ 连不上服务器';MP.online=false;};
+}
+function mpSend(data){if(MP.online&&MP.ws?.readyState===1)MP.ws.send(JSON.stringify({type:'action',data}));}
+function applyRemote(seat,data){
+  const p=G.players[seat];
+  if(data.type==='discard'){const t=p.hand.find(t=>t.id===data.id);if(t)doDiscard(seat,t);}
+  if(data.type==='peng')  doPeng(seat,G.lastDisc);
+  if(data.type==='chi')   {const o=getChiOpts(p.hand,G.lastDisc);if(o[data.idx])doChi(seat,o[data.idx]);}
+  if(data.type==='hu')    endGame(seat,data.tsumo?'自摸！':'荣！');
+  if(data.type==='pass')  {G.claimFor=null;G.chiOpts=null;aiClaims(G.lastDisc,G.lastFrom);}
+}
+
+function startSolo(){_rng=null;MP.online=false;MP.mySeat=0;initGame(0);}
+
+function toast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._t);t._t=setTimeout(()=>t.style.opacity='0',2500);
+}
+</script>
+</body>
+</html>
