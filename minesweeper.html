@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>💣 扫雷</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a2e;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#eee;padding:20px}
+h1{font-size:2rem;margin-bottom:20px;letter-spacing:3px;text-shadow:0 0 20px #e94560}
+.controls{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;justify-content:center}
+.btn-d{padding:8px 18px;border:2px solid #0f3460;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;background:#16213e;color:#a8b2d8;transition:all .2s}
+.btn-d.active,.btn-d:hover{background:#0f3460;color:#e94560;border-color:#e94560}
+.panel{background:#16213e;border-radius:12px;padding:12px 25px;margin-bottom:15px;display:flex;align-items:center;gap:30px;border:2px solid #0f3460}
+.stat{display:flex;align-items:center;gap:6px;font-size:1.3rem;font-weight:bold;font-family:'Courier New',monospace;color:#e94560;min-width:70px}
+.stat .ico{font-size:1.4rem}
+#reset-btn{font-size:1.8rem;background:none;border:2px solid #0f3460;border-radius:8px;padding:4px 14px;cursor:pointer;transition:all .2s}
+#reset-btn:hover{border-color:#e94560;transform:scale(1.1)}
+.board-wrap{background:#16213e;border-radius:12px;padding:15px;border:2px solid #0f3460;overflow:auto;max-width:96vw}
+#board{display:inline-grid;gap:3px}
+.cell{width:34px;height:34px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:bold;display:flex;align-items:center;justify-content:center;transition:background .1s,transform .1s;user-select:none;background:#0f3460;color:#a8b2d8;line-height:1}
+.cell:hover:not(.rev):not(.fl){background:#1a4a80;transform:scale(1.06)}
+.cell.rev{background:#0a1628;cursor:default}
+.cell.hit{background:#e94560!important}
+.n1{color:#4fc3f7}.n2{color:#81c784}.n3{color:#e57373}.n4{color:#7986cb}.n5{color:#ff8a65}.n6{color:#4dd0e1}.n7{color:#f06292}.n8{color:#b0bec5}
+#msg{font-size:1.2rem;font-weight:bold;margin-top:14px;height:28px;color:#e94560;letter-spacing:1px}
+.tip{font-size:.75rem;color:#555;margin-top:10px}
+</style>
+</head>
+<body>
+<h1>💣 扫雷</h1>
+<div class="controls">
+  <button class="btn-d active" onclick="setDiff(0)">初级 9×9 (10雷)</button>
+  <button class="btn-d" onclick="setDiff(1)">中级 16×16 (40雷)</button>
+  <button class="btn-d" onclick="setDiff(2)">高级 30×16 (99雷)</button>
+</div>
+<div class="panel">
+  <div class="stat"><span class="ico">💣</span><span id="mine-disp">10</span></div>
+  <button id="reset-btn" onclick="init()">🙂</button>
+  <div class="stat"><span class="ico">⏱</span><span id="timer">000</span></div>
+</div>
+<div class="board-wrap"><div id="board"></div></div>
+<div id="msg"></div>
+<div class="tip">左键揭开 · 右键插旗</div>
+<script>
+const DIFFS=[{r:9,c:9,m:10},{r:16,c:16,m:40},{r:16,c:30,m:99}];
+let diff=0,bd=[],rev=[],fl=[],mines=[],over=false,won=false,first=true,tid=null,secs=0,R,C,M;
+
+function setDiff(d){diff=d;document.querySelectorAll('.btn-d').forEach((b,i)=>b.classList.toggle('active',i===d));init();}
+
+function init(){
+  clearInterval(tid);secs=0;upTimer();
+  const d=DIFFS[diff];R=d.r;C=d.c;M=d.m;
+  bd=Array(R).fill(0).map(()=>Array(C).fill(0));
+  rev=Array(R).fill(0).map(()=>Array(C).fill(false));
+  fl=Array(R).fill(0).map(()=>Array(C).fill(false));
+  mines=[];over=false;won=false;first=true;
+  document.getElementById('mine-disp').textContent=M;
+  document.getElementById('reset-btn').textContent='🙂';
+  document.getElementById('msg').textContent='';
+  render();
+}
+
+function placeMines(sr,sc){
+  let p=0;
+  while(p<M){
+    const r=Math.floor(Math.random()*R),c=Math.floor(Math.random()*C);
+    if(bd[r][c]===-1)continue;
+    if(Math.abs(r-sr)<=1&&Math.abs(c-sc)<=1)continue;
+    bd[r][c]=-1;mines.push([r,c]);p++;
+  }
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    if(bd[r][c]===-1)continue;
+    let n=0;
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const nr=r+dr,nc=c+dc;if(nr>=0&&nr<R&&nc>=0&&nc<C&&bd[nr][nc]===-1)n++;}
+    bd[r][c]=n;
+  }
+}
+
+function render(){
+  const el=document.getElementById('board');
+  el.style.gridTemplateColumns=`repeat(${C},34px)`;
+  el.innerHTML='';
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const cell=document.createElement('div');
+    cell.className='cell';cell.dataset.r=r;cell.dataset.c=c;
+    cell.addEventListener('click',onClick);
+    cell.addEventListener('contextmenu',onRight);
+    el.appendChild(cell);
+  }
+}
+
+function updCell(r,c){
+  const cell=document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+  if(!cell)return;
+  cell.className='cell';cell.textContent='';
+  if(rev[r][c]){
+    cell.classList.add('rev');
+    if(bd[r][c]===-1)cell.textContent='💣';
+    else if(bd[r][c]>0){cell.textContent=bd[r][c];cell.classList.add('n'+bd[r][c]);}
+  }else if(fl[r][c]){cell.textContent='🚩';}
+}
+
+function onClick(e){
+  if(over||won)return;
+  const r=+e.currentTarget.dataset.r,c=+e.currentTarget.dataset.c;
+  if(fl[r][c]||rev[r][c])return;
+  if(first){first=false;placeMines(r,c);tid=setInterval(()=>{secs=Math.min(secs+1,999);upTimer();},1000);}
+  if(bd[r][c]===-1){rev[r][c]=true;endGame(r,c);return;}
+  flood(r,c);checkWin();refreshAll();
+}
+
+function onRight(e){
+  e.preventDefault();
+  if(over||won)return;
+  const r=+e.currentTarget.dataset.r,c=+e.currentTarget.dataset.c;
+  if(rev[r][c])return;
+  fl[r][c]=!fl[r][c];
+  const rem=M-fl.flat().filter(Boolean).length;
+  document.getElementById('mine-disp').textContent=rem;
+  updCell(r,c);
+}
+
+function flood(r,c){
+  if(r<0||r>=R||c<0||c>=C||rev[r][c]||fl[r][c])return;
+  rev[r][c]=true;
+  if(bd[r][c]===0)for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++)flood(r+dr,c+dc);
+}
+
+function refreshAll(){for(let r=0;r<R;r++)for(let c=0;c<C;c++)updCell(r,c);}
+
+function checkWin(){
+  let safe=0;for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(!rev[r][c]&&bd[r][c]!==-1)safe++;
+  if(safe===0){won=true;clearInterval(tid);document.getElementById('reset-btn').textContent='😎';document.getElementById('msg').textContent=`🎉 胜利！用时 ${secs} 秒`;}
+}
+
+function endGame(hr,hc){
+  over=true;clearInterval(tid);
+  document.getElementById('reset-btn').textContent='😵';
+  for(const[r,c]of mines)if(!fl[r][c])rev[r][c]=true;
+  refreshAll();
+  const h=document.querySelector(`.cell[data-r="${hr}"][data-c="${hc}"]`);
+  if(h)h.classList.add('hit');
+  document.getElementById('msg').textContent='💥 踩到地雷！点表情重新开始';
+}
+
+function upTimer(){document.getElementById('timer').textContent=String(secs).padStart(3,'0');}
+init();
+</script>
+</body>
+</html>
